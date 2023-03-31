@@ -342,7 +342,8 @@ if __name__ == "__main__":
     DEFAULT_DOWNLOAD_SIZE_KB = 1024
     DEFAULT_MIN_DOWNLOAD_SPEED = 3
     DEFAULT_MIN_UPLOAD_SPEED = 0.2
-
+    DEFAULT_RESULT_File_TYPE = ".txt"
+    
     # Create a new configparser instance and load the configuration file
     config = configparser.ConfigParser()
     config.read('config.ini')
@@ -363,7 +364,8 @@ if __name__ == "__main__":
     default_zone_id = config.get('DEFAULT', 'zone_id', fallback='')
     default_api_key = config.get('DEFAULT', 'api_key', fallback='')
     default_subdomain = config.get('DEFAULT', 'subdomain', fallback='')
-
+    default_result_file_type = config.get('DEFAULT', 'result_file_type', fallback=DEFAULT_RESULT_File_TYPE)
+    
     # Initialise the required variables
     delete_existing = 'yes'
     cidr_list = []
@@ -407,6 +409,8 @@ if __name__ == "__main__":
         api_key = default_api_key
         subdomain = default_subdomain
 
+        # Prompt the user for whether they want to save the result in .txt or .csv
+        result_file_type = input(f"Do you want to export results in .txt(just ip) or .csv(detailed) (.txt/.csv) [{default_result_file_type}]? ") or default_result_file_type
 
         # Prompt the user for whether they want to upload the result to their Cloudflare subdomain
         upload_results = input(f"Do you want to upload the result to your Cloudflare subdomain (yes/no) [{default_upload_results}]? ") or default_upload_results
@@ -451,7 +455,8 @@ if __name__ == "__main__":
             'email': email,
             'zone_id': zone_id,
             'api_key': api_key,
-            'subdomain': subdomain
+            'subdomain': subdomain,
+            'result_file_type': result_file_type
         }
 
         # Saving the configuration info to config file for further use
@@ -513,12 +518,20 @@ if __name__ == "__main__":
     # Initiate variables
     test_no = 0
     successful_no = 0
-
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+    unique_file_name = "selected-ips-" + timestr + result_file_type
+    with open(unique_file_name, 'w') as f:
+        if result_file_type == ".csv":
+            f.write("ip,ping,jitter,latency,upload_speed,download_speed\n")
+        else:
+            f.write("")
     # Loop through IP adresses to check their ping, latency and download/upload speed
     for ip in ip_list:
         # Increase the test number
+        LINE_FLUSH = '\r\033[K'
+        UP_FRONT_LINE = '\033[F'
         test_no = test_no + 1
-        print(f"\r\033[KTest #{test_no}: {ip}", end='', flush=True)
+        print(f"{LINE_FLUSH} Test #{test_no}: {ip}", end='', flush=True)
 
         try:
             # Calculate ping of selected ip using related function
@@ -536,7 +549,7 @@ if __name__ == "__main__":
             latency = getLatency(ip, max_latency)
             # Ignore the IP if latency dosn't match the maximum required latency
             if latency > max_latency:
-                print(f"\r\033[K\033[F\r\033[K", end='', flush=True)
+                print(f"{LINE_FLUSH}{UP_FRONT_LINE}{LINE_FLUSH}", end='', flush=True)
                 continue
 
             print(f", Latency: {latency}ms", end='', flush=True)
@@ -545,7 +558,7 @@ if __name__ == "__main__":
             upload_speed = getUploadSpeed(ip, test_size, min_upload_speed)
             # Ignore the IP if upload speed dosn't match the minimum required speed
             if upload_speed < min_upload_speed:
-                print(f"\r\033[K\033[F\r\033[K", end='', flush=True)
+                print(f"{LINE_FLUSH}{UP_FRONT_LINE}{LINE_FLUSH}", end='', flush=True)
                 continue
 
             print(f", Upload: {upload_speed}Mbps", end='', flush=True)
@@ -554,7 +567,7 @@ if __name__ == "__main__":
             download_speed = getDownloadSpeed(ip, test_size, min_download_speed)
             # Ignore the IP if download speed dosn't match the minimum required speed
 
-            print(f"\r\033[K\033[F\r\033[K", end='', flush=True)
+            print(f"{LINE_FLUSH}{UP_FRONT_LINE}{LINE_FLUSH}", end='', flush=True)
 
             if download_speed < min_download_speed:
                 continue
@@ -571,6 +584,13 @@ if __name__ == "__main__":
 
             # Print out the IP and related info as well as ping, latency and download/upload speed
             print(f"\r|{successful_no:3d}|{ip:15s}|{ping:7d} |{jitter:6d} |{latency:6d} |{upload_speed:7.2f} |{download_speed:9.2f} |")
+            
+            # Writing the result in a csv file
+            with open(unique_file_name, 'a') as f:
+                if result_file_type == ".csv":
+                    f.write(f"{ip},{ping},{jitter},{latency},{upload_speed},{download_speed}\n")
+                else:
+                    f.write(ip + "\n")
             selectd_ip_list.append(ip)
         except KeyboardInterrupt:
             print("\n\nRequest cancelled by user!")
@@ -606,12 +626,5 @@ if __name__ == "__main__":
         except:
             print("\nFailed to update Cloudflare subdomain! Invalid credentials provided.")
 
-
-
-    print("\nWriting result to `selected-ips.csv` file....", end='', flush=True)
-
-    with open('selected-ips.csv', 'w') as f:
-        for ip in selectd_ip_list:
-            f.write(ip + '\n')
 
     print(" Done.\n\nFinished.")
